@@ -1,4 +1,9 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-block:env(safe-area-inset-top,0px) env(safe-area-inset-bottom,0px)}body{margin:0;min-height:100vh}[hidden]{display:none!important}</style>
 <title>ヘビー13</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
@@ -86,7 +91,8 @@ th{font-weight:500;color:var(--muted);text-align:left;font-size:.72rem}
 th,td{padding:6px 3px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr.me td{background:var(--surface)}
 tr.now td:first-child{box-shadow:inset 3px 0 var(--mark)}
-td.name{font-weight:700;white-space:nowrap}
+td.name{font-weight:700;white-space:nowrap;line-height:1.35}
+.style{display:block;font-weight:500;font-size:.68rem;color:var(--muted)}
 .first{color:var(--mark)}
 .hand{display:flex;flex-wrap:wrap;gap:1px 8px;align-items:center}
 .digits{display:flex;font-family:var(--display);letter-spacing:0}
@@ -101,6 +107,8 @@ td.name{font-weight:700;white-space:nowrap}
 .big{font:400 2.6rem/1.3 var(--display)}
 </style>
 
+</head>
+<body>
 <main>
   <section id="setup">
     <h1>ヘビー13</h1>
@@ -109,7 +117,19 @@ td.name{font-weight:700;white-space:nowrap}
     <fieldset><legend>プレイ人数（あなた＋COM）</legend><div class="seg" id="nSeg"></div></fieldset>
     <fieldset><legend>COMの強さ</legend><div class="seg" id="lvSeg"></div></fieldset>
     <label class="check"><input type="checkbox" id="useTimer" checked>カードとチップを選ぶ時間を3分にする</label>
+    <label class="check"><input type="checkbox" id="showStyle" checked>COMの性格を表示する（オフにすると結果発表まで秘密）</label>
     <button class="primary" id="start">ゲームを始める</button>
+    <details>
+      <summary>COMの性格</summary>
+      <p class="muted">ゲームのたびに、ランダムで割り当てます。</p>
+      <ul>
+        <li><b>慎重派</b>：安全を優先し、アウトになりそうならパスします。</li>
+        <li><b>攻撃派</b>：多少危なくても、台を高くして相手を追い込みます。</li>
+        <li><b>狙い撃ち派</b>：自分以外の首位に罰点を取らせようとします。</li>
+        <li><b>気分屋</b>：ときどき予想外の手を出します。</li>
+        <li><b>バランス型</b>：損得を見て堅実に打ちます。</li>
+      </ul>
+    </details>
     <details>
       <summary>ルール</summary>
       <ul>
@@ -235,29 +255,56 @@ const Heavy13 = (() => {
   }
 
   /* ---- COM ---- */
+  // 性格は「何を優先するか」。強さ（どれだけ先を読むか）とは別に効く
+  // self: 自分の罰点を嫌う度合い / others: 他人の罰点を喜ぶ度合い / target: 首位の罰点を喜ぶ度合い
+  // keep: 虹と小さい数字の温存 / big: 大きい数字を出したがる / high: 台の合計を高く残したがる
+  // pass: アウトになるときにパスする確率 / dodge: アウト回避のパスを好む度合い / whim: 気まぐれに動く確率
+  const STYLES = {
+    balance: { label: 'バランス型', self: 1, others: 0.25, read: 0.3, target: 0, keep: 1, big: 0, high: 0, spread: 1, pass: 0.85, dodge: 0, whim: 0 },
+    careful: { label: '慎重派', self: 1.6, others: 0, read: 0, target: 0, keep: 2.5, big: 0, high: -0.4, spread: 1, pass: 1, dodge: 0.6, whim: 0 },
+    attack: { label: '攻撃派', self: 0.7, others: 1, read: 1, target: 0, keep: 0.3, big: 0.12, high: 0.5, spread: 1, pass: 0.35, dodge: -0.3, whim: 0 },
+    sniper: { label: '狙い撃ち派', self: 1, others: 0, read: 0, target: 1.2, keep: 1, big: 0, high: 0, spread: 1, pass: 0.8, dodge: 0, whim: 0 },
+    moody: { label: '気分屋', self: 1, others: 0.25, read: 0.3, target: 0, keep: 0.5, big: 0, high: 0, spread: 5, pass: 0.5, dodge: 0, whim: 0.35 }
+  };
+  // 自分以外で、いま順位がいちばん上の人
+  const leaderFor = (s, me) => ranking(s).find(x => x.i !== me).i;
+  // COMの人数分の性格を、なるべく重ならないように配る
+  function dealStyles(count, rnd = Math.random) {
+    const out = [];
+    while (out.length < count) {
+      const bag = Object.keys(STYLES);
+      while (bag.length && out.length < count) out.push(bag.splice(Math.floor(rnd() * bag.length), 1)[0]);
+    }
+    return out;
+  }
   const totals = s => ({
     sum: COLORS.map(c => s.board[c].reduce((t, x) => t + x.v, 0)),
     cnt: COLORS.map(c => s.board[c].length)
   });
 
   // すぐの損が最小の台。安全なら合計をなるべく高くして次の人を苦しくする
-  function greedyColor(sum, cnt, pick, rnd) {
+  function greedyColor(sum, cnt, pick, rnd, dir = 1) {
     if (pick.chip !== 'x') return COLORS.indexOf(pick.chip);
     let best = 0, score = -Infinity;
     for (let c = 0; c < 3; c++) {
-      const t = sum[c] + pick.v, x = (t >= LIMIT ? -100 * cnt[c] : t) + rnd();
+      const t = sum[c] + pick.v, x = (t >= LIMIT ? -100 * cnt[c] : dir * t) + rnd();
       if (x > score) { score = x; best = c; }
     }
     return best;
   }
 
   // 提出後は全員の手が公開されるので、残りの順番を最後まで読める
-  function solve(picks, sum, cnt, queue, stack, n, rnd) {
+  // who を渡すと、その人だけは性格どおりに、ほかの人は標準の考え方で読む
+  function solve(picks, sum, cnt, queue, stack, n, rnd, who) {
     const late = !queue.length;
     if (late && !stack.length) return { g: new Array(n).fill(0), move: null };
     const p = late ? stack[stack.length - 1] : queue[0], pick = picks[p];
     const rest = late ? queue : queue.slice(1), under = late ? stack.slice(0, -1) : stack;
-    const value = g => { let others = 0; for (let i = 0; i < n; i++) if (i !== p) others += g[i]; return -g[p] + 0.3 * others / (n - 1); };
+    const own = who && who.me === p ? who.style : null, style = own || STYLES.balance;
+    const value = g => {
+      let others = 0; for (let i = 0; i < n; i++) if (i !== p) others += g[i];
+      return -style.self * g[p] + style.read * others / (n - 1) + (own ? own.target * g[who.target] : 0);
+    };
     let best = null;
     const consider = (g, move, bonus) => {
       const v = value(g) + bonus + rnd() * 0.001;
@@ -267,28 +314,36 @@ const Heavy13 = (() => {
     for (const c of cols) {
       const s0 = sum[c], c0 = cnt[c], bust = s0 + pick.v >= LIMIT;
       sum[c] = bust ? pick.v : s0 + pick.v; cnt[c] = bust ? 1 : c0 + 1;
-      const g = solve(picks, sum, cnt, rest, under, n, rnd).g;
+      const g = solve(picks, sum, cnt, rest, under, n, rnd, who).g;
       sum[c] = s0; cnt[c] = c0;
       if (bust) g[p] += c0;
-      consider(g, { color: COLORS[c] }, 0.002);
+      consider(g, { color: COLORS[c] }, 0.002 + (bust ? 0 : Math.abs(style.high) * (style.high < 0 ? 12 - s0 - pick.v : s0 + pick.v) / 12));
     }
-    if (!late && queue.length > 1) consider(solve(picks, sum, cnt, rest, stack.concat(p), n, rnd).g, { pass: true }, 0);
+    if (!late && queue.length > 1) {
+      const stuck = cols.every(c => sum[c] + pick.v >= LIMIT);
+      consider(solve(picks, sum, cnt, rest, stack.concat(p), n, rnd, who).g, { pass: true }, stuck ? style.dodge : 0);
+    }
     return best;
   }
 
-  function comMove(s, level, rnd = Math.random) {
+  function comMove(s, level, styleName = 'balance', rnd = Math.random) {
     const c = current(s), pick = s.picks[c.p], { sum, cnt } = totals(s);
-    if (level === 'hard') return solve(s.picks, sum, cnt, s.queue, s.stack, s.n, rnd).move;
-    const col = greedyColor(sum, cnt, pick, rnd);
-    if (canPass(s) && sum[col] + pick.v >= LIMIT && rnd() < 0.85) return { pass: true };
+    const style = STYLES[styleName], target = leaderFor(s, c.p), moody = rnd() < style.whim;
+    if (level === 'hard' && !moody) return solve(s.picks, sum, cnt, s.queue, s.stack, s.n, rnd, { me: c.p, style, target }).move;
+    // 狙い撃ち派は、首位がまだ置いていなければ台を高くし、そうでなければ低くする
+    let dir = style.high < 0 ? -1 : 1;
+    if (styleName === 'sniper') dir = s.queue.concat(s.stack).includes(target) ? 1 : -1;
+    if (moody) dir = 0;
+    const col = greedyColor(sum, cnt, pick, rnd, dir), bust = sum[col] + pick.v >= LIMIT;
+    if (canPass(s) && ((bust && rnd() < style.pass) || (moody && rnd() < 0.5))) return { pass: true };
     return { color: COLORS[col] };
   }
 
   // 提出の選択。使うのは公開情報（台と全員の残り手札）だけで、相手の今回の選択は見ない
-  function comPick(s, me, level, rnd = Math.random) {
-    const base = totals(s), n = s.n;
+  function comPick(s, me, level, styleName = 'balance', rnd = Math.random) {
+    const base = totals(s), n = s.n, style = STYLES[styleName], target = leaderFor(s, me);
     const left = SET - 1 - ((s.round - 1) % SET); // このセットの残りラウンド数
-    const samples = level === 'hard' ? 160 : 40, spread = level === 'hard' ? 0.1 : 0.3; // 大きいほど出し方がばらつく
+    const samples = level === 'hard' ? 160 : 40, spread = (level === 'hard' ? 0.1 : 0.3) * style.spread; // 大きいほど出し方がばらつく
     const hands = s.players.map(p => ({ cards: p.cards, chips: Object.keys(p.chips).flatMap(k => Array(p.chips[k]).fill(k)) }));
     const worlds = Array.from({ length: samples }, () => hands.map(h => ({ v: pickOne(h.cards, rnd), chip: pickOne(h.chips, rnd) })));
     const options = [];
@@ -306,11 +361,11 @@ const Heavy13 = (() => {
           if (late) stack.pop(); else queue.shift();
         }
         let others = 0; for (let i = 0; i < n; i++) if (i !== me) others += g[i];
-        total += g[me] - 0.25 * others / (n - 1);
+        total += style.self * g[me] - style.others * others / (n - 1) - style.target * g[target];
       }
       // 虹と小さい数字は後のために残したい
       const keep = (chip === 'x' ? 0.12 * left : 0) + (6 - v) * 0.015 * left;
-      options.push({ v, chip, score: total / samples + keep });
+      options.push({ v, chip, score: total / samples + style.keep * keep - style.big * v });
     }
     // 良い手ほど高い確率で選ぶ（毎回同じ手にしないため）
     const low = Math.min(...options.map(o => o.score));
@@ -320,7 +375,7 @@ const Heavy13 = (() => {
     return { v: options[k].v, chip: options[k].chip };
   }
 
-  return { COLORS, LIMIT, ROUNDS, SET, newGame, turnOrder, submit, current, canPass, pass, place, endRound, ranking, totals, comPick, comMove };
+  return { STYLES, dealStyles, leaderFor, COLORS, LIMIT, ROUNDS, SET, newGame, turnOrder, submit, current, canPass, pass, place, endRound, ranking, totals, comPick, comMove };
 })();
 if (typeof module !== 'undefined') module.exports = Heavy13;
 
@@ -331,10 +386,12 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
   const NAME = { r: '赤', g: '緑', b: '青', x: '虹' };
   const cfg = { n: 3, level: 'normal' };
   try { Object.assign(cfg, JSON.parse(localStorage.getItem('heavy13-cfg'))); } catch {}
+  let styles = [], openStyle = true;
   let s, phase, sel, log, timers = [], clock = null, fast = false, showNums = true, notice = '', bad = false, hit = null;
 
   const who = i => i === 0 ? 'あなた' : 'COM ' + 'ABCDEF'[i - 1];
   const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  const styleTag = i => el('span', { className: 'style', textContent: H.STYLES[styles[i]].label });
   const dot = c => el('span', { className: 'dot ' + c, title: NAME[c] });
   const later = (fn, ms) => timers.push(setTimeout(fn, ms));
   const stop = () => { timers.forEach(clearTimeout); timers = []; clearInterval(clock); clock = null; };
@@ -354,6 +411,7 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
     stop();
     try { localStorage.setItem('heavy13-cfg', JSON.stringify(cfg)); } catch {}
     s = H.newGame(cfg.n); log = [];
+    styles = [null, ...H.dealStyles(cfg.n - 1)]; openStyle = $('showStyle').checked;
     screen('play');
     beginRound(`先手はくじ引きで「${who(s.first)}」になりました。`);
   }
@@ -384,7 +442,7 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
     const me = s.players[0], any = a => a[Math.floor(Math.random() * a.length)];
     const mine = { v: sel.v ?? any(me.cards), chip: sel.chip ?? any(Object.keys(me.chips).filter(c => me.chips[c])) };
     // COMはあなたの選択を見ずに決める
-    const picks = s.players.map((_, i) => i === 0 ? mine : H.comPick(s, i, cfg.level));
+    const picks = s.players.map((_, i) => i === 0 ? mine : H.comPick(s, i, cfg.level, styles[i]));
     stop(); $('timer').textContent = '';
     H.submit(s, picks);
     log.unshift(`ラウンド${s.round} 提出: ` + picks.map((k, i) => `${who(i)}=${NAME[k.chip]}${k.v}`).join('、'));
@@ -402,7 +460,7 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
       return render();
     }
     render();
-    later(() => act(H.comMove(s, cfg.level)), fast ? 350 : 1300);
+    later(() => act(H.comMove(s, cfg.level, styles[c.p])), fast ? 350 : 1300);
   }
 
   function act(move) {
@@ -433,7 +491,7 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
     const list = H.ranking(s), mine = list.find(x => x.i === 0);
     $('myRank').textContent = `あなたは${mine.rank}位`;
     $('rankRows').replaceChildren(...list.map(x => el('tr', { className: x.i === 0 ? 'me' : '' },
-      el('td', { textContent: x.rank + '位' }), el('td', { className: 'name', textContent: who(x.i) }), el('td', { className: 'pen', textContent: x.penalty }))));
+      el('td', { textContent: x.rank + '位' }), el('td', { className: 'name' }, who(x.i), x.i ? styleTag(x.i) : ''), el('td', { className: 'pen', textContent: x.penalty }))));
     $('myRank').focus({ preventScroll: true });
   }
 
@@ -519,7 +577,7 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
       if (s.picks) pick.append(dot(s.picks[i].chip), ' ' + (showNums ? s.picks[i].v : '?')); else pick.textContent = '—';
       const isFirst = s.first === i && !s.over;
       return el('tr', { className: (i === 0 ? 'me ' : '') + (c && c.p === i ? 'now' : '') },
-        el('td', { className: 'name' }, who(i), isFirst ? el('span', { className: 'first', textContent: ' ★', title: '先手' }) : ''),
+        el('td', { className: 'name' }, who(i), isFirst ? el('span', { className: 'first', textContent: ' ★', title: '先手' }) : '', i && openStyle ? styleTag(i) : ''),
         el('td', {}, el('div', { className: 'hand' }, digits, left)), pick,
         el('td', { className: 'pen num', textContent: p.penalty }));
     }));
@@ -539,5 +597,5 @@ if (typeof module !== 'undefined') module.exports = Heavy13;
   };
 })();
 </script>
-
-</body></html>
+</body>
+</html>
