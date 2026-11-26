@@ -1,0 +1,543 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ヘビー13</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap">
+<style>
+/* layout: 上から 3つの台 → 自分の操作 → 全員の手札表。操作がスクロールなしで届く順 */
+:root{
+  --bg:#e9e7e2; --surface:#f8f7f4; --fg:#23211e; --muted:#69645b; --line:#c9c4ba;
+  --stone:#4a4640; --stone-fg:#fbfaf7; --accent:#23211e; --on-accent:#fbfaf7; --mark:#b86e00;
+  --r:#c03a34; --g:#23794a; --b:#2b62b0; --on-color:#ffffff; --bad:#b3261e; --good:#1c6b41;
+  --display:"Dela Gothic One","Hiragino Kaku Gothic ProN",sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#191816; --surface:#25231f; --fg:#f0ede6; --muted:#a8a298; --line:#454139;
+  --stone:#d8d3c8; --stone-fg:#1d1b18; --accent:#f0ede6; --on-accent:#1d1b18; --mark:#ffb53d;
+  --r:#e0605a; --g:#47a873; --b:#5d93de; --on-color:#14120f; --bad:#ff7a70; --good:#6fd19c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#191816; --surface:#25231f; --fg:#f0ede6; --muted:#a8a298; --line:#454139;
+  --stone:#d8d3c8; --stone-fg:#1d1b18; --accent:#f0ede6; --on-accent:#1d1b18; --mark:#ffb53d;
+  --r:#e0605a; --g:#47a873; --b:#5d93de; --on-color:#14120f; --bad:#ff7a70; --good:#6fd19c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:500 15px/1.65 var(--body)}
+main{max-width:34rem;margin:0 auto;padding-block:16px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+section{display:flex;flex-direction:column;gap:14px}
+h1,h2{font-family:var(--display);font-weight:400;margin:0;line-height:1.3}
+h1{font-size:clamp(2.2rem,12vw,3.4rem)}
+h2{font-size:1.15rem}
+p{margin:0}
+.muted{color:var(--muted);font-size:.85rem}
+button{font:700 1rem var(--body);cursor:pointer;color:var(--fg);-webkit-tap-highlight-color:transparent}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--mark);outline-offset:2px}
+button:disabled{cursor:default;opacity:.35}
+.primary{background:var(--accent);color:var(--on-accent);border:0;border-radius:8px;padding:13px 16px;width:100%}
+.plain{background:var(--surface);border:1.5px solid var(--line);border-radius:8px;padding:10px 12px}
+.text{background:none;border:0;color:var(--muted);text-decoration:underline;padding:4px;font-size:.85rem}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{font-weight:700;padding:0 0 6px}
+.seg{display:flex;gap:6px}
+.seg button{flex:1}
+.seg button[aria-pressed="true"],.cards button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.check{display:flex;gap:10px;align-items:center}
+.check input{width:20px;height:20px;accent-color:var(--mark)}
+details{border-top:1px solid var(--line);padding-top:10px}
+summary{cursor:pointer;font-weight:700}
+details ul{margin:8px 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px}
+.cairn{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.cairn span,.stone{display:grid;place-items:center;background:var(--stone);color:var(--stone-fg);font-family:var(--display);border-radius:46% 54% 48% 52%/58% 56% 44% 42%}
+.cairn span{height:26px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.num{font-variant-numeric:tabular-nums}
+.piles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pile{--c:var(--r);display:flex;flex-direction:column;align-items:center;background:var(--surface);border-radius:10px;border-bottom:8px solid var(--c);overflow:hidden;min-width:0}
+.pile[data-c="g"]{--c:var(--g)} .pile[data-c="b"]{--c:var(--b)}
+.pile header{align-self:stretch;background:var(--c);color:var(--on-color);text-align:center;font-weight:700;padding:2px}
+.total{font:400 2.3rem/1.2 var(--display);margin-top:4px}
+.total small{font:500 .75rem var(--body);color:var(--muted)}
+.safe{font-size:.75rem;color:var(--muted);text-align:center}
+.safe.risk{color:var(--bad);font-weight:700}
+.stones{display:flex;flex-wrap:wrap-reverse;justify-content:center;align-content:flex-start;gap:3px;padding:8px 4px;min-height:84px;flex:1}
+.stone{width:30px;height:26px;font-size:.85rem}
+.pile.hit{animation:hit .5s}
+@keyframes hit{20%{transform:translateY(6px)}40%{transform:translateY(-4px)}60%{transform:translateY(3px)}}
+@media (prefers-reduced-motion:reduce){.pile.hit{animation:none}}
+.panel{display:flex;flex-direction:column;gap:10px;background:var(--surface);border-radius:10px;padding:12px}
+.msg{font-weight:700;min-height:1.65em}
+.msg.bad{color:var(--bad)}
+.cards{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cards button{background:var(--bg);border:1.5px solid var(--line);border-radius:7px;padding:9px 0;font-family:var(--display);font-weight:400;font-size:1.15rem}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.chips button{background:var(--bg);border:3px solid transparent;border-radius:10px;padding:6px 0 4px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.8rem}
+.chips button[aria-pressed="true"]{border-color:var(--fg)}
+.dot{display:inline-block;width:14px;height:14px;border-radius:50%;flex:none;background:var(--r);vertical-align:-2px}
+.chips .dot{width:30px;height:30px}
+.dot.g{background:var(--g)} .dot.b{background:var(--b)}
+.dot.x{background:conic-gradient(var(--r),#e5b819,var(--g),var(--b),#8a4fc0,var(--r))}
+.act{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;background:var(--bg);border:2px solid var(--line);border-radius:8px;padding:11px 12px}
+.act em{font-style:normal;white-space:nowrap;color:var(--good)}
+.act.out em{color:var(--bad)}
+.order{display:flex;flex-wrap:wrap;gap:5px;font-size:.8rem;margin:0;padding:0;list-style:none}
+.order li{display:flex;align-items:center;gap:5px;border:1.5px solid var(--line);border-radius:99px;padding:2px 9px}
+.order li.now{border-color:var(--mark);background:var(--mark);color:var(--on-accent)}
+.order li.passed{border-style:dashed}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{font-weight:500;color:var(--muted);text-align:left;font-size:.72rem}
+th,td{padding:6px 3px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.me td{background:var(--surface)}
+tr.now td:first-child{box-shadow:inset 3px 0 var(--mark)}
+td.name{font-weight:700;white-space:nowrap}
+.first{color:var(--mark)}
+.hand{display:flex;flex-wrap:wrap;gap:1px 8px;align-items:center}
+.digits{display:flex;font-family:var(--display);letter-spacing:0}
+.digits i{font-style:normal;width:13px;text-align:center}
+.digits i.used{opacity:.18}
+.left{display:flex;gap:6px;align-items:center}
+.left span{display:flex;gap:1px;align-items:center}
+.left .dot{width:10px;height:10px}
+.pickcell{white-space:nowrap;font-family:var(--display);font-size:1rem}
+.pen{text-align:right;font:400 1.25rem var(--display)}
+.rank td{font-size:1rem;padding:10px 4px}
+.big{font:400 2.6rem/1.3 var(--display)}
+</style>
+
+<main>
+  <section id="setup">
+    <h1>ヘビー13</h1>
+    <div class="cairn" aria-hidden="true"><span style="width:44px">0</span><span style="width:60px">4</span><span style="width:84px">6</span></div>
+    <p>3つの台に石を置きます。合計を13以上にすると、そこにあった石の<b>個数</b>が罰点です。</p>
+    <fieldset><legend>プレイ人数（あなた＋COM）</legend><div class="seg" id="nSeg"></div></fieldset>
+    <fieldset><legend>COMの強さ</legend><div class="seg" id="lvSeg"></div></fieldset>
+    <label class="check"><input type="checkbox" id="useTimer" checked>カードとチップを選ぶ時間を3分にする</label>
+    <button class="primary" id="start">ゲームを始める</button>
+    <details>
+      <summary>ルール</summary>
+      <ul>
+        <li>毎ラウンド、全員が数字カード（0〜6）と色チップを1つずつ同時に出します。使ったものはなくなります。</li>
+        <li>置く順番は、虹チップが先、次に数字が大きい順、同じなら先手（★）から時計回りです。</li>
+        <li>虹チップは好きな台に置けます。ほかのチップはその色の台に置きます。</li>
+        <li>自分の番に1回だけパスできます。パスした人は全員の後で、パスした順の逆順に置きます。</li>
+        <li>台の合計が13以上になると、先にあった石を全部引き取り、1個につき罰点1。自分の石は台に残ります。</li>
+        <li>全14ラウンド。7ラウンド後にカードとチップを配り直します。台の石はそのままです。</li>
+        <li>最後に罰点を受けた人が次の先手です。罰点が少ないほど上位で、同点なら最近罰点を受けた人が下です。</li>
+      </ul>
+    </details>
+  </section>
+
+  <section id="play" hidden>
+    <div class="top">
+      <h2 class="num" id="roundLabel"></h2>
+      <span class="num" id="timer" role="timer"></span>
+      <span><button class="text" id="speed" aria-pressed="false"></button> <button class="text" id="quit">やめる</button></span>
+    </div>
+    <div class="piles" id="piles"></div>
+    <div class="panel">
+      <p class="msg" id="msg" role="status"></p>
+      <ol class="order" id="order" aria-label="石を置く順番"></ol>
+      <div id="controls" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+    <table>
+      <thead><tr><th>プレイヤー</th><th>残りのカードとチップ</th><th>今回</th><th style="text-align:right">罰点</th></tr></thead>
+      <tbody id="players"></tbody>
+    </table>
+    <details><summary>これまでの動き</summary><ul id="log"></ul></details>
+  </section>
+
+  <section id="result" hidden>
+    <p class="muted">最終結果</p>
+    <p class="big" id="myRank" tabindex="-1"></p>
+    <table class="rank"><thead><tr><th>順位</th><th>プレイヤー</th><th style="text-align:right">罰点</th></tr></thead><tbody id="rankRows"></tbody></table>
+    <p class="muted">同点の場合は、より最近に罰点を受けた人が下の順位です。</p>
+    <button class="primary" id="again">同じ設定でもう一回</button>
+    <button class="plain" id="back">設定を変える</button>
+  </section>
+</main>
+
+<script>
+// ヘビー13のルールとCOMの判断（画面に依存しない部分）
+const Heavy13 = (() => {
+  const COLORS = ['r', 'g', 'b'], LIMIT = 13, ROUNDS = 14, SET = 7;
+  const fullHand = () => ({ cards: [0, 1, 2, 3, 4, 5, 6], chips: { r: 2, g: 2, b: 2, x: 1 } });
+  const pickOne = (a, rnd) => a[Math.floor(rnd() * a.length)];
+
+  function newGame(n, rnd = Math.random) {
+    return {
+      n, round: 1, first: Math.floor(rnd() * n), seq: 0, over: false,
+      players: Array.from({ length: n }, () => ({ ...fullHand(), penalty: 0, lastPen: 0 })),
+      board: { r: [], g: [], b: [] },
+      picks: null, queue: [], stack: [], roundLast: null, roundPen: []
+    };
+  }
+
+  // 虹が先 → 数字が大きい順 → 先手から時計回り
+  function turnOrder(picks, first) {
+    const n = picks.length, dist = i => (i - first + n) % n;
+    return picks.map((_, i) => i).sort((a, b) =>
+      (picks[b].chip === 'x') - (picks[a].chip === 'x') || picks[b].v - picks[a].v || dist(a) - dist(b));
+  }
+
+  function submit(s, picks) {
+    picks.forEach((k, i) => {
+      const p = s.players[i], at = p.cards.indexOf(k.v);
+      if (at < 0 || !p.chips[k.chip]) throw new Error('持っていないカードかチップです');
+      p.cards.splice(at, 1); p.chips[k.chip]--;
+    });
+    s.picks = picks; s.queue = turnOrder(picks, s.first); s.stack = []; s.roundLast = null; s.roundPen = [];
+  }
+
+  // パスした人は、全員の後に、パスした順の逆順で置く
+  function current(s) {
+    if (s.queue.length) return { p: s.queue[0], late: false };
+    if (s.stack.length) return { p: s.stack[s.stack.length - 1], late: true };
+    return null;
+  }
+  // 順番待ちが自分だけのときにパスしても順番が変わらないので、選べないようにする
+  const canPass = s => s.queue.length > 1;
+
+  function pass(s) {
+    if (!canPass(s)) throw new Error('パスできません');
+    s.stack.push(s.queue.shift());
+  }
+
+  function place(s, color) {
+    const c = current(s), pick = s.picks[c.p];
+    const col = pick.chip === 'x' ? color : pick.chip;
+    if (!COLORS.includes(col)) throw new Error('台を選んでください');
+    const pile = s.board[col], before = pile.reduce((t, x) => t + x.v, 0), stone = { v: pick.v, p: c.p };
+    let taken = 0;
+    if (before + pick.v >= LIMIT) {
+      taken = pile.length;
+      s.board[col] = [stone];
+      const p = s.players[c.p];
+      p.penalty += taken; p.lastPen = ++s.seq; s.roundLast = c.p; s.roundPen.push({ p: c.p, n: taken });
+    } else pile.push(stone);
+    (c.late ? s.stack : s.queue)[c.late ? 'pop' : 'shift']();
+    return { p: c.p, color: col, v: pick.v, before, taken };
+  }
+
+  function endRound(s) {
+    if (s.roundLast !== null) s.first = s.roundLast;
+    s.picks = null;
+    if (s.round === ROUNDS) { s.over = true; return; }
+    s.round++;
+    if (s.round === SET + 1) s.players.forEach(p => Object.assign(p, fullHand()));
+  }
+
+  // 罰点が少ない順。同点は、より最近に罰点を受けた人が下
+  function ranking(s) {
+    const list = s.players.map((p, i) => ({ i, penalty: p.penalty, lastPen: p.lastPen }))
+      .sort((a, b) => a.penalty - b.penalty || a.lastPen - b.lastPen);
+    list.forEach((x, k) => {
+      const q = list[k - 1];
+      x.rank = q && q.penalty === x.penalty && q.lastPen === x.lastPen ? q.rank : k + 1;
+    });
+    return list;
+  }
+
+  /* ---- COM ---- */
+  const totals = s => ({
+    sum: COLORS.map(c => s.board[c].reduce((t, x) => t + x.v, 0)),
+    cnt: COLORS.map(c => s.board[c].length)
+  });
+
+  // すぐの損が最小の台。安全なら合計をなるべく高くして次の人を苦しくする
+  function greedyColor(sum, cnt, pick, rnd) {
+    if (pick.chip !== 'x') return COLORS.indexOf(pick.chip);
+    let best = 0, score = -Infinity;
+    for (let c = 0; c < 3; c++) {
+      const t = sum[c] + pick.v, x = (t >= LIMIT ? -100 * cnt[c] : t) + rnd();
+      if (x > score) { score = x; best = c; }
+    }
+    return best;
+  }
+
+  // 提出後は全員の手が公開されるので、残りの順番を最後まで読める
+  function solve(picks, sum, cnt, queue, stack, n, rnd) {
+    const late = !queue.length;
+    if (late && !stack.length) return { g: new Array(n).fill(0), move: null };
+    const p = late ? stack[stack.length - 1] : queue[0], pick = picks[p];
+    const rest = late ? queue : queue.slice(1), under = late ? stack.slice(0, -1) : stack;
+    const value = g => { let others = 0; for (let i = 0; i < n; i++) if (i !== p) others += g[i]; return -g[p] + 0.3 * others / (n - 1); };
+    let best = null;
+    const consider = (g, move, bonus) => {
+      const v = value(g) + bonus + rnd() * 0.001;
+      if (!best || v > best.v) best = { g, move, v };
+    };
+    const cols = pick.chip === 'x' ? [0, 1, 2] : [COLORS.indexOf(pick.chip)];
+    for (const c of cols) {
+      const s0 = sum[c], c0 = cnt[c], bust = s0 + pick.v >= LIMIT;
+      sum[c] = bust ? pick.v : s0 + pick.v; cnt[c] = bust ? 1 : c0 + 1;
+      const g = solve(picks, sum, cnt, rest, under, n, rnd).g;
+      sum[c] = s0; cnt[c] = c0;
+      if (bust) g[p] += c0;
+      consider(g, { color: COLORS[c] }, 0.002);
+    }
+    if (!late && queue.length > 1) consider(solve(picks, sum, cnt, rest, stack.concat(p), n, rnd).g, { pass: true }, 0);
+    return best;
+  }
+
+  function comMove(s, level, rnd = Math.random) {
+    const c = current(s), pick = s.picks[c.p], { sum, cnt } = totals(s);
+    if (level === 'hard') return solve(s.picks, sum, cnt, s.queue, s.stack, s.n, rnd).move;
+    const col = greedyColor(sum, cnt, pick, rnd);
+    if (canPass(s) && sum[col] + pick.v >= LIMIT && rnd() < 0.85) return { pass: true };
+    return { color: COLORS[col] };
+  }
+
+  // 提出の選択。使うのは公開情報（台と全員の残り手札）だけで、相手の今回の選択は見ない
+  function comPick(s, me, level, rnd = Math.random) {
+    const base = totals(s), n = s.n;
+    const left = SET - 1 - ((s.round - 1) % SET); // このセットの残りラウンド数
+    const samples = level === 'hard' ? 160 : 40, spread = level === 'hard' ? 0.1 : 0.3; // 大きいほど出し方がばらつく
+    const hands = s.players.map(p => ({ cards: p.cards, chips: Object.keys(p.chips).flatMap(k => Array(p.chips[k]).fill(k)) }));
+    const worlds = Array.from({ length: samples }, () => hands.map(h => ({ v: pickOne(h.cards, rnd), chip: pickOne(h.chips, rnd) })));
+    const options = [];
+    for (const v of s.players[me].cards) for (const chip of ['r', 'g', 'b', 'x']) {
+      if (!s.players[me].chips[chip]) continue;
+      let total = 0;
+      for (const w of worlds) {
+        const picks = w.slice(); picks[me] = { v, chip };
+        const sum = base.sum.slice(), cnt = base.cnt.slice(), queue = turnOrder(picks, s.first), stack = [], g = new Array(n).fill(0);
+        while (queue.length || stack.length) {
+          const late = !queue.length, p = late ? stack[stack.length - 1] : queue[0], k = picks[p];
+          const col = greedyColor(sum, cnt, k, rnd), bust = sum[col] + k.v >= LIMIT;
+          if (!late && bust && queue.length > 1) { stack.push(queue.shift()); continue; }
+          if (bust) { g[p] += cnt[col]; sum[col] = k.v; cnt[col] = 1; } else { sum[col] += k.v; cnt[col]++; }
+          if (late) stack.pop(); else queue.shift();
+        }
+        let others = 0; for (let i = 0; i < n; i++) if (i !== me) others += g[i];
+        total += g[me] - 0.25 * others / (n - 1);
+      }
+      // 虹と小さい数字は後のために残したい
+      const keep = (chip === 'x' ? 0.12 * left : 0) + (6 - v) * 0.015 * left;
+      options.push({ v, chip, score: total / samples + keep });
+    }
+    // 良い手ほど高い確率で選ぶ（毎回同じ手にしないため）
+    const low = Math.min(...options.map(o => o.score));
+    const weights = options.map(o => Math.exp((low - o.score) / spread));
+    let at = rnd() * weights.reduce((a, b) => a + b, 0), k = 0;
+    while (k < options.length - 1 && (at -= weights[k]) > 0) k++;
+    return { v: options[k].v, chip: options[k].chip };
+  }
+
+  return { COLORS, LIMIT, ROUNDS, SET, newGame, turnOrder, submit, current, canPass, pass, place, endRound, ranking, totals, comPick, comMove };
+})();
+if (typeof module !== 'undefined') module.exports = Heavy13;
+
+</script>
+<script>
+(() => {
+  const H = Heavy13, $ = id => document.getElementById(id);
+  const NAME = { r: '赤', g: '緑', b: '青', x: '虹' };
+  const cfg = { n: 3, level: 'normal' };
+  try { Object.assign(cfg, JSON.parse(localStorage.getItem('heavy13-cfg'))); } catch {}
+  let s, phase, sel, log, timers = [], clock = null, fast = false, showNums = true, notice = '', bad = false, hit = null;
+
+  const who = i => i === 0 ? 'あなた' : 'COM ' + 'ABCDEF'[i - 1];
+  const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+  const dot = c => el('span', { className: 'dot ' + c, title: NAME[c] });
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const stop = () => { timers.forEach(clearTimeout); timers = []; clearInterval(clock); clock = null; };
+  const screen = id => { ['setup', 'play', 'result'].forEach(x => $(x).hidden = x !== id); window.scrollTo(0, 0); };
+  const note = (text, isBad = false) => { notice = text; bad = isBad; };
+
+  function seg(id, options, key) {
+    $(id).replaceChildren(...options.map(([value, label]) => el('button', {
+      type: 'button', className: 'plain', textContent: label,
+      ariaPressed: String(cfg[key] === value),
+      onclick: () => { cfg[key] = value; seg(id, options, key); }
+    })));
+    [...$(id).children].forEach((b, i) => b.setAttribute('aria-pressed', cfg[key] === options[i][0]));
+  }
+
+  function start() {
+    stop();
+    try { localStorage.setItem('heavy13-cfg', JSON.stringify(cfg)); } catch {}
+    s = H.newGame(cfg.n); log = [];
+    screen('play');
+    beginRound(`先手はくじ引きで「${who(s.first)}」になりました。`);
+  }
+
+  function beginRound(lead) {
+    stop(); phase = 'select'; sel = { v: null, chip: null }; hit = null;
+    note(`${lead ? lead + ' ' : ''}カードとチップを1つずつ選んでください。`);
+    // 残り1枚のものは自動で選ぶ
+    const me = s.players[0];
+    if (me.cards.length === 1) sel.v = me.cards[0];
+    const colors = Object.keys(me.chips).filter(c => me.chips[c]);
+    if (colors.length === 1) sel.chip = colors[0];
+    $('timer').textContent = '';
+    if ($('useTimer').checked) {
+      const end = Date.now() + 180000;
+      const draw = () => {
+        const left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+        $('timer').textContent = `残り ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+        if (!left) submit(true);
+      };
+      draw(); clock = setInterval(draw, 250);
+    }
+    render();
+  }
+
+  function submit(timeUp) {
+    if (phase !== 'select') return;
+    const me = s.players[0], any = a => a[Math.floor(Math.random() * a.length)];
+    const mine = { v: sel.v ?? any(me.cards), chip: sel.chip ?? any(Object.keys(me.chips).filter(c => me.chips[c])) };
+    // COMはあなたの選択を見ずに決める
+    const picks = s.players.map((_, i) => i === 0 ? mine : H.comPick(s, i, cfg.level));
+    stop(); $('timer').textContent = '';
+    H.submit(s, picks);
+    log.unshift(`ラウンド${s.round} 提出: ` + picks.map((k, i) => `${who(i)}=${NAME[k.chip]}${k.v}`).join('、'));
+    phase = 'reveal'; showNums = false;
+    note((timeUp ? '時間切れのため、選んでいない分はランダムに出しました。' : '') + 'まず色チップを公開…');
+    render();
+    later(() => { showNums = true; note('全員のカードが公開されました。順番を確認してください。'); render(); }, 900);
+  }
+
+  function nextTurn() {
+    const c = H.current(s);
+    if (!c) return finishRound();
+    if (c.p === 0) {
+      if (!bad) note('あなたの番です。'); else note(notice + ' 次はあなたの番です。', true);
+      return render();
+    }
+    render();
+    later(() => act(H.comMove(s, cfg.level)), fast ? 350 : 1300);
+  }
+
+  function act(move) {
+    const p = H.current(s).p;
+    hit = null;
+    if (move.pass) {
+      H.pass(s); note(`${who(p)}はパスしました。`); log.unshift(notice);
+    } else {
+      const r = H.place(s, move.color);
+      if (r.taken) { hit = r.color; note(`${who(p)}が${NAME[r.color]}に${r.v}を置いて${r.before + r.v}。石${r.taken}個で罰点${r.taken}！`, true); }
+      else note(`${who(p)}が${NAME[r.color]}に${r.v}を置きました（合計${r.before + r.v}）。`);
+      log.unshift(notice);
+    }
+    nextTurn();
+  }
+
+  function finishRound() {
+    const sum = s.roundPen.map(x => `${who(x.p)} +${x.n}`).join('、');
+    const done = s.round;
+    H.endRound(s); phase = 'roundEnd';
+    const tail = s.over ? '全14ラウンド終了です。' : `次の先手は「${who(s.first)}」。` + (done === H.SET ? 'カードとチップを配り直しました。台の石は残ります。' : '');
+    note(`${bad ? notice + ' ' : ''}ラウンド${done}終了。${sum ? '罰点: ' + sum + '。' : '罰点はなし。'}${tail}`, bad);
+    render(done);
+  }
+
+  function showResult() {
+    stop(); screen('result');
+    const list = H.ranking(s), mine = list.find(x => x.i === 0);
+    $('myRank').textContent = `あなたは${mine.rank}位`;
+    $('rankRows').replaceChildren(...list.map(x => el('tr', { className: x.i === 0 ? 'me' : '' },
+      el('td', { textContent: x.rank + '位' }), el('td', { className: 'name', textContent: who(x.i) }), el('td', { className: 'pen', textContent: x.penalty }))));
+    $('myRank').focus({ preventScroll: true });
+  }
+
+  function render(doneRound) {
+    const shownRound = phase === 'roundEnd' ? (doneRound ?? s.round) : s.round;
+    $('roundLabel').textContent = `ラウンド ${shownRound} / ${H.ROUNDS}`;
+    $('speed').textContent = fast ? 'COM: はやい' : 'COM: ふつう速';
+
+    const { sum, cnt } = H.totals(s);
+    $('piles').replaceChildren(...H.COLORS.map((c, i) => {
+      const box = el('div', { className: 'pile' + (hit === c ? ' hit' : '') });
+      box.dataset.c = c;
+      const room = H.LIMIT - 1 - sum[i];
+      box.append(
+        el('header', { textContent: NAME[c] + 'の台' }),
+        el('div', { className: 'total num' }, String(sum[i]), el('small', { textContent: ' /12' })),
+        el('div', { className: 'safe' + (room < 6 ? ' risk' : ''), textContent: room >= 6 ? 'どの石もセーフ' : `${room}まで置ける` }),
+        el('div', { className: 'stones' }, ...s.board[c].map(x => el('span', { className: 'stone', textContent: x.v, title: who(x.p) + 'の石' }))),
+        el('div', { className: 'safe', textContent: `石 ${cnt[i]}個` }));
+      return box;
+    }));
+
+    $('msg').textContent = notice; $('msg').className = 'msg' + (bad ? ' bad' : '');
+    renderOrder(); renderControls(sum, cnt); renderPlayers();
+    $('log').replaceChildren(...log.map(t => el('li', { textContent: t })));
+  }
+
+  function renderOrder() {
+    let items = [];
+    if ((phase === 'reveal' && showNums) || phase === 'place') {
+      const c = H.current(s);
+      const seq = s.queue.map(p => ({ p, passed: false })).concat(s.stack.slice().reverse().map(p => ({ p, passed: true })));
+      items = seq.map(({ p, passed }) => el('li', { className: (passed ? 'passed' : '') + (phase === 'place' && c && c.p === p ? ' now' : '') },
+        dot(s.picks[p].chip), `${s.picks[p].v} ${who(p)}${passed ? '（パス）' : ''}`));
+    }
+    $('order').replaceChildren(...items);
+    $('order').hidden = !items.length;
+  }
+
+  function renderControls(sum, cnt) {
+    const box = $('controls'); box.replaceChildren();
+    const button = (text, onclick, cls = 'primary') => el('button', { type: 'button', className: cls, textContent: text, onclick });
+    if (phase === 'select') {
+      const me = s.players[0];
+      box.append(el('div', { className: 'cards', role: 'group', ariaLabel: '数字カード' }, ...[0, 1, 2, 3, 4, 5, 6].map(v => {
+        const b = el('button', { type: 'button', textContent: v, disabled: !me.cards.includes(v), onclick: () => { sel.v = v; render(); } });
+        b.setAttribute('aria-pressed', sel.v === v); return b;
+      })));
+      box.append(el('div', { className: 'chips', role: 'group', ariaLabel: '色チップ' }, ...['r', 'g', 'b', 'x'].map(c => {
+        const b = el('button', { type: 'button', disabled: !me.chips[c], onclick: () => { sel.chip = c; render(); } },
+          dot(c), `${NAME[c]} 残り${me.chips[c]}`);
+        b.setAttribute('aria-pressed', sel.chip === c); return b;
+      })));
+      const ready = sel.v !== null && sel.chip !== null;
+      const go = button(ready ? `${NAME[sel.chip]}チップと「${sel.v}」を提出` : 'カードとチップを選んでください', () => submit(false));
+      go.disabled = !ready; box.append(go);
+    } else if (phase === 'reveal' && showNums) {
+      box.append(button('石を置き始める', () => { phase = 'place'; note(''); nextTurn(); }));
+    } else if (phase === 'place') {
+      const c = H.current(s);
+      if (!c || c.p !== 0) return;
+      const pick = s.picks[0];
+      for (const col of pick.chip === 'x' ? H.COLORS : [pick.chip]) {
+        const i = H.COLORS.indexOf(col), t = sum[i] + pick.v, out = t >= H.LIMIT;
+        box.append(el('button', { type: 'button', className: 'act' + (out ? ' out' : ''), onclick: () => act({ color: col }) },
+          el('span', {}, dot(col), ` ${NAME[col]}に「${pick.v}」を置く`),
+          el('em', { textContent: out ? `${t} アウト 罰点+${cnt[i]}` : `${sum[i]}→${t} セーフ` })));
+      }
+      if (H.canPass(s)) box.append(button('パスして後で置く（このラウンド1回）', () => act({ pass: true }), 'plain'));
+      else box.append(el('p', { className: 'muted', textContent: c.late ? 'パスは使ったので、ここで置きます。' : '順番待ちがあなただけなので、パスはできません。' }));
+    } else if (phase === 'roundEnd') {
+      box.append(s.over ? button('最終結果を見る', showResult) : button('次のラウンドへ', () => { bad = false; beginRound(); }));
+    }
+  }
+
+  function renderPlayers() {
+    const c = phase === 'place' ? H.current(s) : null;
+    $('players').replaceChildren(...s.players.map((p, i) => {
+      const digits = el('span', { className: 'digits', ariaLabel: '残りカード ' + (p.cards.join('、') || 'なし') },
+        ...[0, 1, 2, 3, 4, 5, 6].map(v => el('i', { textContent: v, className: p.cards.includes(v) ? '' : 'used' })));
+      const left = el('span', { className: 'left' }, ...['r', 'g', 'b', 'x'].map(k => el('span', { ariaLabel: `${NAME[k]}${p.chips[k]}枚` }, dot(k), String(p.chips[k]))));
+      const pick = el('td', { className: 'pickcell' });
+      if (s.picks) pick.append(dot(s.picks[i].chip), ' ' + (showNums ? s.picks[i].v : '?')); else pick.textContent = '—';
+      const isFirst = s.first === i && !s.over;
+      return el('tr', { className: (i === 0 ? 'me ' : '') + (c && c.p === i ? 'now' : '') },
+        el('td', { className: 'name' }, who(i), isFirst ? el('span', { className: 'first', textContent: ' ★', title: '先手' }) : ''),
+        el('td', {}, el('div', { className: 'hand' }, digits, left)), pick,
+        el('td', { className: 'pen num', textContent: p.penalty }));
+    }));
+  }
+
+  seg('nSeg', [3, 4, 5, 6, 7].map(n => [n, n + '人']), 'n');
+  seg('lvSeg', [['normal', 'ふつう'], ['hard', 'つよい']], 'level');
+  $('start').onclick = start;
+  $('again').onclick = start;
+  $('back').onclick = () => screen('setup');
+  $('speed').onclick = () => { fast = !fast; $('speed').textContent = fast ? 'COM: はやい' : 'COM: ふつう速'; $('speed').setAttribute('aria-pressed', fast); };
+  let quitArmed = null;
+  $('quit').onclick = () => {
+    if (quitArmed) { clearTimeout(quitArmed); quitArmed = null; $('quit').textContent = 'やめる'; stop(); screen('setup'); return; }
+    $('quit').textContent = 'もう一度押すと終了';
+    quitArmed = setTimeout(() => { quitArmed = null; $('quit').textContent = 'やめる'; }, 3000);
+  };
+})();
+</script>
+
+</body></html>
